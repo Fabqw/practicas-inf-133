@@ -2,10 +2,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 from urllib import parse as urlparse
 
-# Aplicando los principios de desarrollo de Software DRY, KISS, YAGNI y 
-# la S de SOLID construye una API RESTful para encriptar mensajes, la API debe permitir:
 mensajes = []
-
 class HTTPResponseHandler:
     @staticmethod
     def handle_response(handler, status, data):
@@ -22,7 +19,7 @@ class HTTPResponseHandler:
 
 class MensajeService:
     @staticmethod
-    def mensaje_cifrado(mensaje):
+    def cifrar_mensaje(mensaje):
         mensaje = mensaje.lower()
         new_mensaje = ""
         for char in mensaje:
@@ -33,27 +30,113 @@ class MensajeService:
             else:
                 new_mensaje += char
         return new_mensaje
-        
-
-
-
-        
     
+    @staticmethod
+    def create_mensaje(data):
+        contenido = data.get("contenido", "")
+        contenido_encriptado = MensajeService.cifrar_mensaje(contenido)
+        mensaje = {
+            "id" : len(mensajes)+1,
+            "contenido": contenido,
+            "contenido_encriptado": contenido_encriptado
+        }
+        mensajes.append(mensaje)
+        return mensajes
 
+    @staticmethod
+    def list_mensajes():
+        return mensajes
 
+    @staticmethod
+    def buscar_mensaje_id(mensaje_id):
+        for mensaje in mensajes:
+            if mensaje["id"] == mensaje_id:
+                return mensaje
+        return None
 
-# Crear un mensaje
-# Listar todos los mensajes
-# Buscar mensajes por ID
-# Actualizar el contenido de un mensaje
-# Eliminar un mensaje
-# De los mensajes se debe almacenar la siguiente información:
+    @staticmethod
+    def update_mensaje(mensaje_id, data):
+        mensaje = MensajeService.buscar_mensaje_id(mensaje_id)
+        if mensaje:
+            contenido = data.get("contenido", "")
+            contenido_encriptado = MensajeService.cifrar_mensaje(contenido)
+            mensaje["contenido"] = contenido
+            mensaje["contenido_encriptado"] = contenido_encriptado
+            return mensaje
+        return None
 
-# ID (identificador único)
-# Contenido (mensaje a encriptar)
-# Contenido encriptado
+    @staticmethod
+    def delete_mensaje(mensaje_id):
+        for mensaje in mensajes:
+            if mensaje["id"] == mensaje_id:
+                mensajes.remove(mensaje)
+                return mensajes
+        return None
 
-# El encriptado debe ser realizado con el algoritmo de cifrado César, 
-# donde cada letra del mensaje debe ser reemplazada por la letra que se encuentra 3 posiciones adelante en el alfabeto. Por ejemplo, la letra a debe ser reemplazada por la letra d, la letra b por la letra e, y así sucesivamente.
+class RESTRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed_path = urlparse.urlparse(self.path)
+        query_params = urlparse.parse_qs(parsed_path.query)
 
-# Sugerencia: Utiliza los ASCII codes para realizar el encriptado.
+        if parsed_path.path == "/mensajes":
+            HTTPResponseHandler.handle_response(self, 200, MensajeService.list_mensajes())
+        elif self.path.startswith("/mensajes/"):
+            mensaje_id = int(self.path.split("/")[-1])
+            mensaje = MensajeService.buscar_mensaje_id(mensaje_id)
+            if mensaje:
+                HTTPResponseHandler.handle_response(self, 200, mensaje)
+            else:
+                HTTPResponseHandler.handle_response(self, 404, {"error": "Mensaje no encontrado"})
+        else:
+            HTTPResponseHandler.handle_response(self, 404, {"error": "Ruta no encontrada"})
+
+    def do_POST(self):
+        if self.path == "/mensajes":
+            data = self.read_data()
+            mensaje = MensajeService.create_mensaje(data)
+            HTTPResponseHandler.handle_response(self, 201, mensaje)
+        else:
+            HTTPResponseHandler.handle_response(self, 404, {"error": "Ruta no encontrada"})
+
+    def do_PUT(self):
+        if self.path.startswith("/mensajes/"):            
+            mensaje_id = int(self.path.split("/")[-1])
+            data = self.read_data()
+            mensajes = MensajeService.update_mensaje(mensaje_id, data)
+            if mensajes:
+                HTTPResponseHandler.handle_response(self, 200, mensajes)
+            else:
+                HTTPResponseHandler.handle_response(self, 404, {"error": "Mensaje no encontrado"})
+        else:
+            HTTPResponseHandler.handle_response(self, 404, {"error": "Ruta no encontrada"})
+
+    def do_DELETE(self):
+        if self.path.startswith("/mensajes/"):
+            mensaje_id = int(self.path.split("/")[-1])
+            mensajes = MensajeService.delete_mensaje(mensaje_id)
+            if mensajes:
+                HTTPResponseHandler.handle_response(self, 200, mensajes)
+            else:
+                HTTPResponseHandler.handle_response(self, 404, {"error": "Mensaje no encontrado"})
+        else:
+            HTTPResponseHandler.handle_response(self, 404, {"error": "Ruta no encontrada"})
+
+    def read_data(self):
+        content_length = int(self.headers["Content-Length"])
+        data = self.rfile.read(content_length)
+        data = json.loads(data.decode("utf-8"))
+        return data
+
+def run_server(port=8000):
+    try:
+        server_address = ("", port)
+        httpd = HTTPServer(server_address, RESTRequestHandler)
+        print(f"Iniciando servidor web en http://localhost:{port}/")
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nDeteniendo el servidor HTTP...")
+        httpd.server_close()
+        print("Servidor detenido correctamente.")
+
+if __name__ == "__main__":
+    run_server()
