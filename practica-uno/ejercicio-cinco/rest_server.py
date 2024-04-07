@@ -99,6 +99,9 @@ class RESTRequestHandler(BaseHTTPRequestHandler):
                 HTTPResponseHandler.handle_response(self, 200, animales_genero)
             else:
                 HTTPResponseHandler.handle_response(self,204,{})
+        
+        else:
+            HTTPResponseHandler.handle_response(self, 404, {"message": "Ruta no encontrada"})
     
     def read_data(self):
         content_length = int(self.headers["Content-Length"])
